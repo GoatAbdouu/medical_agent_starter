@@ -1,0 +1,54 @@
+general:
+  questions:
+    - "Quel est votre âge et votre sexe ?"
+    - "Depuis quand les symptômes ont-ils commencé ?"
+    - "Les symptômes sont-ils continus ou par crises ?"
+    - "Avez-vous des maladies chroniques (ex: diabète) ?"
+orl:
+  questions:
+    - "La fièvre dépasse-t-elle 39°C ?"
+    - "Avez-vous des difficultés à avaler ?"
+    - "Y a-t-il une toux associée ?"
+    - "Présence de ganglions douloureux au cou ?"
+respiratory:
+  questions:
+    - "Toux sèche ou grasse ?"
+    - "Avez-vous des difficultés à respirer (essoufflement) ?"
+    - "Fièvre mesurée ?"
+    - "Douleur thoracique ?"
+digestive:
+  questions:
+    - "Localisation de la douleur (haut/bas/droite/gauche) ?"
+    - "Nausées, vomissements ?"
+    - "Diarrhée ou constipation ?"
+    - "Lien avec les repas ?"
+neuro:
+  questions:
+    - "Céphalées soudaines et intenses ?"
+    - "Troubles de la vision ou de la parole ?"
+    - "Faiblesse d’un côté du corps ?"
+    - "Vomissements en jet ?"
+dermato:
+  questions:
+    - "L'éruption démange-t-elle ?"
+    - "Étendue et localisation ?"
+    - "Fièvre associée ?"
+    - "Exposition récente (produits, plantes) ?"
+uro:
+  questions:
+    - "Brûlures à la miction ?"
+    - "Fréquence des mictions ?"
+    - "Fièvre ?"
+    - "Douleur lombaire ?"
+cardio:
+  questions:
+    - "Douleur thoracique à l’effort ou au repos ?"
+    - "Essoufflement ?"
+    - "Palpitations ?"
+    - "Antécédents cardiaques ?"
+osteo:
+  questions:
+    - "Traumatisme récent ?"
+    - "Localisation de la douleur ?"
+    - "Mobilité réduite ?"
+    - "Gonflement ou rougeur ?"

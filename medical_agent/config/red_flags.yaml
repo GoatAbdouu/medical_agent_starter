@@ -1,0 +1,8 @@
+patterns:
+  - label: "Douleur thoracique suspecte"
+    regex: "douleur thoracique|oppression|poitrine serrée"
+  - label: "Déficit neurologique brutal"
+    regex: "parole incohérente|faiblesse d.?un côté|vision double|paralysie"
+  - label: "Détresse respiratoire"
+    regex: "détresse respiratoire|je n'arrive pas à respirer"
+rules: []
