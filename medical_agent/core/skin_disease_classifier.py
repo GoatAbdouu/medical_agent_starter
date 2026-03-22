@@ -15,15 +15,15 @@ IMAGE_SIZE = 128
 
 FOLDER_TO_DISEASE = {
     "1. Eczema 1677": "Eczéma",
-    "2. Warts Molluscum and other Viral Infections - 2103": "Verrues / Molluscum",
-    "3. Melanoma 15.75k": "Mélanome",
-    "4. Atopic Dermatitis - 1.25k": "Dermatite Atopique",
-    "5. Basal Cell Carcinoma (BCC) 3323": "Carcinome Basocellulaire",
-    "6. Melanocytic Nevi (Moles) - 7970": "Nævus Mélanocytaire (Grain de beauté)",
-    "7. Benign Keratosis-like Lesions (BKL) 2624": "Kératose Bénigne",
-    "8. Psoriasis pictures Lichen Planus and related diseases - 2k": "Psoriasis / Lichen Plan",
-    "9. Seborrheic Keratoses and other Benign Tumors - 1.8k": "Kératose Séborrhéique",
-    "10. Tinea Ringworm Candidiasis and other Fungal Infections - 1702": "Mycose / Teigne",
+    "10. Warts Molluscum and other Viral Infections - 2103": "Verrues / Molluscum",
+    "2. Melanoma 15.75k": "Mélanome",
+    "3. Atopic Dermatitis - 1.25k": "Dermatite Atopique",
+    "4. Basal Cell Carcinoma (BCC) 3323": "Carcinome Basocellulaire",
+    "5. Melanocytic Nevi (NV) - 7970": "Nævus Mélanocytaire (Grain de beauté)",
+    "6. Benign Keratosis-like Lesions (BKL) 2624": "Kératose Bénigne",
+    "7. Psoriasis pictures Lichen Planus and related diseases - 2k": "Psoriasis / Lichen Plan",
+    "8. Seborrheic Keratoses and other Benign Tumors - 1.8k": "Kératose Séborrhéique",
+    "9. Tinea Ringworm Candidiasis and other Fungal Infections - 1.7k": "Mycose / Teigne",
 }
 
 DISEASE_INFO = {
@@ -137,7 +137,6 @@ INFERENCE_TRANSFORMS = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
-
 @dataclass
 class SkinDiagnosisCandidate:
     disease_name: str
@@ -147,7 +146,6 @@ class SkinDiagnosisCandidate:
     color: str
     advice: str
     urgency: str
-
 
 @dataclass
 class SkinDiagnosisResult:
@@ -162,8 +160,9 @@ class SkinDiagnosisResult:
 
 
 class SkinDiseaseModel(nn.Module):
-    """MobileNetV2 adapté pour la classification de maladies cutanées"""
-
+    """
+    MobileNetV2 adapté pour la classification de maladies cutanées
+    """
     def __init__(self, num_classes: int = 10, freeze_base: bool = True):
         super().__init__()
         self.base = models.mobilenet_v2(weights=MobileNet_V2_Weights.DEFAULT)
@@ -198,6 +197,10 @@ class SkinDiseaseClassifier:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._model: Optional[SkinDiseaseModel] = None
 
+    @property
+    def model_loaded(self) -> bool:
+        return self._model is not None
+
     def _load_model(self) -> None:
         """Charge le modèle depuis le disque"""
         if not self.model_path.exists():
@@ -206,7 +209,7 @@ class SkinDiseaseClassifier:
                 "Entraînez-le d'abord avec scripts/train_skin_classifier.py"
             )
         model = SkinDiseaseModel(num_classes=len(self.CLASS_NAMES), freeze_base=False)
-        state = torch.load(self.model_path, map_location=self.device)
+        state = torch.load(self.model_path, map_location=self.device, weights_only=True)
         model.load_state_dict(state)
         model.to(self.device)
         model.eval()
@@ -219,16 +222,7 @@ class SkinDiseaseClassifier:
         return self._model
 
     def predict(self, image, top_n: int = 5) -> SkinDiagnosisResult:
-        """
-        Prédit les maladies cutanées à partir d'une image PIL.
-
-        Args:
-            image: Image PIL (RGB)
-            top_n: Nombre de candidats à retourner
-
-        Returns:
-            SkinDiagnosisResult avec les candidats triés par confiance
-        """
+        """Prédit les maladies cutanées à partir d'une image PIL."""
         if image.mode != "RGB":
             image = image.convert("RGB")
 
