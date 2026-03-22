@@ -22,7 +22,6 @@ from medical_agent.core.skin_disease_classifier import (
     SkinDiseaseModel,
 )
 
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Entraînement du classificateur de maladies cutanées"
@@ -57,7 +56,6 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-
 def build_transforms():
     """Retourne les transformations d'augmentation (entraînement) et de validation."""
     train_transforms = transforms.Compose([
@@ -71,7 +69,6 @@ def build_transforms():
     ])
     val_transforms = INFERENCE_TRANSFORMS
     return train_transforms, val_transforms
-
 
 def main() -> None:
     args = parse_args()
@@ -118,14 +115,14 @@ def main() -> None:
         train_subset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=2,
+        num_workers=0,
         pin_memory=(device.type == "cuda"),
     )
     val_loader = DataLoader(
         val_final,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=2,
+        num_workers=0,
         pin_memory=(device.type == "cuda"),
     )
 
@@ -151,7 +148,7 @@ def main() -> None:
         lr=args.lr,
     )
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="max", patience=3, factor=0.5, verbose=True
+        optimizer, mode="max", patience=3, factor=0.5
     )
 
     # -----------------------------------------------------------------
