@@ -215,6 +215,36 @@ class MedicalAgent:
         
         return diagnosis_result
     
+    def _init_skin_classifier(self) -> None:
+        """Initialise le classificateur de maladies cutanées (chargement paresseux)"""
+        if hasattr(self, '_skin_classifier'):
+            return
+        try:
+            from medical_agent.core.skin_disease_classifier import SkinDiseaseClassifier
+            self._skin_classifier = SkinDiseaseClassifier()
+        except Exception as e:
+            print(f"⚠️ Classificateur de peau non disponible ({e})")
+            self._skin_classifier = None
+
+    def diagnose_skin_image(self, image, top_n: int = 5):
+        """
+        Effectue un diagnostic de maladie cutanée à partir d'une image PIL.
+
+        Args:
+            image: Image PIL
+            top_n: Nombre de diagnostics candidats à retourner
+
+        Returns:
+            SkinDiagnosisResult ou lève une exception si le modèle n'est pas disponible
+        """
+        self._init_skin_classifier()
+        if self._skin_classifier is None:
+            raise RuntimeError(
+                "Le classificateur de maladies cutanées n'est pas disponible. "
+                "Vérifiez que les dépendances sont installées et que le modèle existe."
+            )
+        return self._skin_classifier.predict(image, top_n=top_n)
+
     def get_disease_details(self, disease_name: str):
         """Récupère les détails d'une maladie spécifique"""
         return self.disease_predictor.get_disease_info(disease_name)
