@@ -1,8 +1,10 @@
 """
 Script d'entraînement du classificateur de maladies cutanées
 Utilise MobileNetV2 avec transfer learning sur le dataset Kaggle Skin Disease
+Sauvegarde automatiquement l'historique dans models/training_history.json
 """
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -12,7 +14,7 @@ sys.path.insert(0, str(project_root))
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, WeightedRandomSampler, random_split
+from torch.utils.data import DataLoader, Subset, WeightedRandomSampler, random_split
 from torchvision import datasets, transforms
 
 from medical_agent.core.skin_disease_classifier import (
@@ -80,6 +82,7 @@ def main() -> None:
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    history_path = output_path.parent / "training_history.json"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"🖥️  Dispositif utilisé : {device}")
@@ -96,9 +99,12 @@ def main() -> None:
     for _, label in full_dataset.samples:
         class_counts[label] += 1
 
+    # Build readable class names list
+    class_names_fr = []
     print("\n📂 Correspondance des classes et distribution :")
     for idx, class_name in enumerate(full_dataset.classes):
         readable = FOLDER_TO_DISEASE.get(class_name, class_name)
+        class_names_fr.append(readable)
         print(f"   [{idx}] {class_name}  →  {readable}  ({class_counts[idx]} images)")
 
     n_total = len(full_dataset)
@@ -113,11 +119,9 @@ def main() -> None:
 
     # Create a separate ImageFolder with validation transforms using the same indices
     val_dataset = datasets.ImageFolder(root=str(data_dir), transform=val_transforms)
-    from torch.utils.data import Subset
     val_final = Subset(val_dataset, val_subset.indices)
 
-    # Compute per-class counts from the training split to avoid division by zero
-    # and ensure weights match the actual training distribution
+    # Compute per-class counts from the training split
     num_classes = len(full_dataset.classes)
     train_class_counts = [0] * num_classes
     for i in train_subset.indices:
@@ -177,6 +181,18 @@ def main() -> None:
     )
 
     # -----------------------------------------------------------------
+    # Training history (saved to JSON after every epoch)
+    # -----------------------------------------------------------------
+    history = {
+        "train_loss": [],
+        "val_loss": [],
+        "train_acc": [],
+        "val_acc": [],
+        "class_names": class_names_fr,
+        "class_counts": class_counts,
+    }
+
+    # -----------------------------------------------------------------
     # Boucle d'entraînement
     # -----------------------------------------------------------------
     best_val_acc = 0.0
@@ -227,6 +243,16 @@ def main() -> None:
 
         scheduler.step(val_acc)
 
+        # Save to history
+        history["train_loss"].append(round(train_loss, 4))
+        history["val_loss"].append(round(val_loss, 4))
+        history["train_acc"].append(round(train_acc, 4))
+        history["val_acc"].append(round(val_acc, 4))
+
+        # Save history to JSON after every epoch (crash-safe)
+        with open(history_path, "w") as f:
+            json.dump(history, f, indent=2, ensure_ascii=False)
+
         # Icône de progression
         icon = "✅" if val_acc > best_val_acc else "  "
 
@@ -245,6 +271,7 @@ def main() -> None:
     print(f"\n🎉 Entraînement terminé !")
     print(f"   Meilleure précision de validation : {best_val_acc:.2%}")
     print(f"   Modèle sauvegardé dans            : {output_path}")
+    print(f"   Historique sauvegardé dans         : {history_path}")
 
 
 if __name__ == "__main__":
