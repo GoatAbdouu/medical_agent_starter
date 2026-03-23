@@ -12,7 +12,7 @@ sys.path.insert(0, str(project_root))
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, WeightedRandomSampler, random_split
 from torchvision import datasets, transforms
 
 from medical_agent.core.skin_disease_classifier import (
@@ -91,10 +91,15 @@ def main() -> None:
 
     full_dataset = datasets.ImageFolder(root=str(data_dir), transform=train_transforms)
 
-    print("\n📂 Correspondance des classes :")
+    # Count samples per class
+    class_counts = [0] * len(full_dataset.classes)
+    for _, label in full_dataset.samples:
+        class_counts[label] += 1
+
+    print("\n📂 Correspondance des classes et distribution :")
     for idx, class_name in enumerate(full_dataset.classes):
         readable = FOLDER_TO_DISEASE.get(class_name, class_name)
-        print(f"   [{idx}] {class_name}  →  {readable}")
+        print(f"   [{idx}] {class_name}  →  {readable}  ({class_counts[idx]} images)")
 
     n_total = len(full_dataset)
     n_train = int(0.8 * n_total)
@@ -111,10 +116,27 @@ def main() -> None:
     from torch.utils.data import Subset
     val_final = Subset(val_dataset, val_subset.indices)
 
+    # Compute per-class counts from the training split to avoid division by zero
+    # and ensure weights match the actual training distribution
+    num_classes = len(full_dataset.classes)
+    train_class_counts = [0] * num_classes
+    for i in train_subset.indices:
+        train_class_counts[full_dataset.samples[i][1]] += 1
+
+    # Build sample weights for WeightedRandomSampler
+    train_sample_weights = [
+        1.0 / train_class_counts[full_dataset.samples[i][1]] for i in train_subset.indices
+    ]
+    sampler = WeightedRandomSampler(
+        weights=train_sample_weights,
+        num_samples=len(train_sample_weights),
+        replacement=True,
+    )
+
     train_loader = DataLoader(
         train_subset,
         batch_size=args.batch_size,
-        shuffle=True,
+        sampler=sampler,
         num_workers=0,
         pin_memory=(device.type == "cuda"),
     )
@@ -129,7 +151,6 @@ def main() -> None:
     # -----------------------------------------------------------------
     # Modèle
     # -----------------------------------------------------------------
-    num_classes = len(full_dataset.classes)
     model = SkinDiseaseModel(num_classes=num_classes, freeze_base=True)
     model.to(device)
 
@@ -142,7 +163,11 @@ def main() -> None:
     # -----------------------------------------------------------------
     # Optimiseur et scheduler
     # -----------------------------------------------------------------
-    criterion = nn.CrossEntropyLoss()
+    class_weights = torch.tensor(
+        [n_train / (num_classes * c) for c in train_class_counts],
+        dtype=torch.float,
+    ).to(device)
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.Adam(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=args.lr,
