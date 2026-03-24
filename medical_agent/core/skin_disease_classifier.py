@@ -11,7 +11,7 @@ import torch.nn as nn
 from torchvision import models, transforms
 from torchvision.models import MobileNet_V2_Weights
 
-IMAGE_SIZE = 128
+IMAGE_SIZE = 224
 
 FOLDER_TO_DISEASE = {
     "1. Eczema 1677": "Eczéma",
@@ -162,6 +162,7 @@ class SkinDiagnosisResult:
 class SkinDiseaseModel(nn.Module):
     """
     MobileNetV2 adapté pour la classification de maladies cutanées
+    Tête classifieur plus profonde : 1280→512→256→num_classes avec BatchNorm
     """
     def __init__(self, num_classes: int = 10, freeze_base: bool = True):
         super().__init__()
@@ -171,14 +172,23 @@ class SkinDiseaseModel(nn.Module):
             for param in self.base.parameters():
                 param.requires_grad = False
 
-        in_features = self.base.classifier[1].in_features
+        in_features = self.base.classifier[1].in_features  # 1280 pour MobileNetV2
         self.base.classifier = nn.Sequential(
-            nn.Dropout(0.3),
-            nn.Linear(in_features, 256),
+            nn.Linear(in_features, 512),
             nn.ReLU(),
-            nn.Dropout(0.2),
+            nn.BatchNorm1d(512),
+            nn.Dropout(0.4),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.BatchNorm1d(256),
+            nn.Dropout(0.3),
             nn.Linear(256, num_classes),
         )
+
+    def unfreeze_backbone(self) -> None:
+        """Dégèle tous les paramètres de la base pour le fine-tuning (Phase 2)."""
+        for param in self.base.parameters():
+            param.requires_grad = True
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.base(x)
