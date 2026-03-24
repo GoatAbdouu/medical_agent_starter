@@ -36,7 +36,6 @@ from sklearn.metrics import confusion_matrix, classification_report
 
 from medical_agent.core.skin_disease_classifier import (
     FOLDER_TO_DISEASE,
-    IMAGE_SIZE,
     INFERENCE_TRANSFORMS,
     SkinDiseaseModel,
 )
@@ -255,11 +254,7 @@ def main():
     model.eval()
     print(f"   🧠 Modèle chargé sur {device}")
 
-    val_transforms = transforms.Compose([
-        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
+    val_transforms = INFERENCE_TRANSFORMS
     dataset = datasets.ImageFolder(root=args.data_dir, transform=val_transforms)
     loader = DataLoader(dataset, batch_size=32, shuffle=False, num_workers=0)
     print(f"   📂 Dataset chargé : {len(dataset)} images")
