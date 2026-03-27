@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
+import torch
 from PIL import Image
 
 if TYPE_CHECKING:
@@ -112,8 +113,6 @@ class VLMExplainer:
     def _try_load_blip(self, model_name: str) -> None:
         """Attempt to load the BLIP processor and model (silently fails)."""
         try:
-            import torch  # noqa: PLC0415
-
             self._blip_processor = BlipProcessor.from_pretrained(model_name)
             self._blip_model = BlipForConditionalGeneration.from_pretrained(model_name)
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -126,8 +125,6 @@ class VLMExplainer:
 
     def _blip_caption(self, image: Image.Image) -> str:
         """Generate a short BLIP caption for the image."""
-        import torch  # noqa: PLC0415
-
         inputs = self._blip_processor(  # type: ignore[call-arg]
             images=image, return_tensors="pt"
         ).to(self._blip_device)

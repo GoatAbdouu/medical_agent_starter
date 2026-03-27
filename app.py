@@ -91,11 +91,15 @@ def transcribe_audio(audio_bytes, voice_service):
 
 @st.cache_resource
 def initialize_vlm_explainer():
-    """Initialise le VLM explainer (chargement paresseux, fallback template si BLIP absent)"""
+    """Initialise le VLM explainer.
+
+    Tries BLIP first; falls back to the template-based system if BLIP is not
+    installed or cannot be loaded (e.g., no internet access or insufficient RAM).
+    """
     if not VLM_AVAILABLE:
         return None
     try:
-        explainer = VLMExplainer(use_blip=False)  # template fallback — fast and safe
+        explainer = VLMExplainer(use_blip=True)  # BLIP if available; template fallback otherwise
         return explainer
     except Exception:
         return None
@@ -549,11 +553,8 @@ def main():
                                     skin_result, individual_preds = agent.diagnose_skin_image_ensemble(
                                         skin_image, top_n=skin_top_n
                                     )
-                                    # Determine agreement status from disclaimer
-                                    if "d'accord" in skin_result.disclaimer:
-                                        agreement_status = True
-                                    elif "divergent" in skin_result.disclaimer:
-                                        agreement_status = False
+                                    # Read the agreement flag set by the ensemble classifier
+                                    agreement_status = getattr(skin_result, '_ensemble_agreement', None)
                                 except Exception:
                                     skin_result = agent.diagnose_skin_image(skin_image, top_n=skin_top_n)
                             else:

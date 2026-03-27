@@ -411,9 +411,13 @@ class EnsembleClassifier:
             f"⚠️ This is not medical advice. Consult a healthcare professional."
         )
 
-        return SkinDiagnosisResult(
+        result = SkinDiagnosisResult(
             candidates=candidates,
             top_diagnosis=top_diagnosis,
             needs_urgent_attention=needs_urgent,
             disclaimer=disclaimer,
         )
+        # Attach the agreement flag as a dynamic attribute so callers can inspect it
+        # without requiring a dataclass change.
+        result._ensemble_agreement = agreement  # type: ignore[attr-defined]
+        return result
