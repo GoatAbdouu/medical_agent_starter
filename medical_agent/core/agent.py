@@ -10,6 +10,7 @@ from medical_agent.core.disease_predictor import DiseasePredictor
 from medical_agent.core.triage_system import TriageSystem
 from medical_agent.core.disambiguation import DisambiguationDetector
 from medical_agent.core.question_generator import FollowUpQuestionGenerator
+from medical_agent.core.system_prompt import SYSTEM_PROMPT
 from medical_agent.config.settings import settings
 
 # Import du prédicteur Deep Learning (optionnel)
@@ -27,7 +28,15 @@ class MedicalAgent:
     - Prédiction de maladies (Deep Learning ou règles)
     - Triage d'urgence
     - Génération de recommandations
+    - Classification d'images cutanées par ensemble
+    - Explication VLM des résultats
+
+    The agent is governed by the SYSTEM_PROMPT defined in
+    ``medical_agent.core.system_prompt``, which enforces medical safety rules.
     """
+
+    #: System prompt that governs this agent's behaviour and safety rules.
+    SYSTEM_PROMPT: str = SYSTEM_PROMPT
     
     def __init__(
         self,
@@ -226,17 +235,37 @@ class MedicalAgent:
             print(f"⚠️ Classificateur de peau non disponible ({e})")
             self._skin_classifier = None
 
+    def _init_ensemble_classifier(self) -> None:
+        """Initialise l'ensemble de classificateurs (chargement paresseux)."""
+        if hasattr(self, '_ensemble_classifier'):
+            return
+        try:
+            from medical_agent.core.ensemble_classifier import EnsembleClassifier
+            self._ensemble_classifier = EnsembleClassifier()
+        except Exception as e:
+            print(f"⚠️ Ensemble non disponible ({e})")
+            self._ensemble_classifier = None
+
     def diagnose_skin_image(self, image, top_n: int = 5):
         """
         Effectue un diagnostic de maladie cutanée à partir d'une image PIL.
+
+        Essaie d'abord l'ensemble (EfficientNet-B3 + MobileNetV2 + ResNet50).
+        Si aucun modèle d'ensemble n'est disponible, bascule sur le classificateur
+        MobileNetV2 simple.
 
         Args:
             image: Image PIL
             top_n: Nombre de diagnostics candidats à retourner
 
         Returns:
-            SkinDiagnosisResult ou lève une exception si le modèle n'est pas disponible
+            SkinDiagnosisResult ou lève une exception si aucun modèle n'est disponible
         """
+        self._init_ensemble_classifier()
+        if self._ensemble_classifier is not None and self._ensemble_classifier.available_models:
+            return self._ensemble_classifier.predict(image, top_n=top_n)
+
+        # Fallback : classificateur unique MobileNetV2
         self._init_skin_classifier()
         if self._skin_classifier is None:
             raise RuntimeError(
@@ -244,6 +273,23 @@ class MedicalAgent:
                 "Vérifiez que les dépendances sont installées et que le modèle existe."
             )
         return self._skin_classifier.predict(image, top_n=top_n)
+
+    def diagnose_skin_image_ensemble(self, image, top_n: int = 5):
+        """
+        Effectue un diagnostic par ensemble des trois modèles.
+
+        Returns a tuple (SkinDiagnosisResult, dict_individual_predictions).
+        The individual predictions dict maps model name → list[SkinDiagnosisCandidate].
+        """
+        self._init_ensemble_classifier()
+        if self._ensemble_classifier is None or not self._ensemble_classifier.available_models:
+            raise RuntimeError(
+                "Aucun modèle d'ensemble disponible. "
+                "Entraînez-les d'abord avec scripts/train_ensemble.py"
+            )
+        ensemble_result = self._ensemble_classifier.predict(image, top_n=top_n)
+        individual = self._ensemble_classifier.get_individual_predictions(image, top_n=top_n)
+        return ensemble_result, individual
 
     def get_disease_details(self, disease_name: str):
         """Récupère les détails d'une maladie spécifique"""

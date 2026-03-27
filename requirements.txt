@@ -11,6 +11,19 @@ torch>=2.0.0
 torchvision>=0.15.0
 Pillow>=10.0.0
 
+# Ensemble models & visualisation
+matplotlib>=3.7.0
+seaborn>=0.12.0
+tqdm>=4.65.0
+numpy>=1.24.0
+
+# VLM (optional — enables BLIP-based image explanations)
+transformers>=4.30.0
+
+# Notebook support
+jupyter>=1.0.0
+ipywidgets>=8.0.0
+
 # Voice Recognition (optional)
 SpeechRecognition>=3.10.0
 # Pour le support microphone (optionnel): pip install pyaudio
