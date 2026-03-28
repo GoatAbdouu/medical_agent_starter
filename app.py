@@ -1,6 +1,6 @@
 """
-Application Streamlit - Agent Médical
-Avec support Deep Learning et reconnaissance vocale
+Application Streamlit - Agent Médical Vision IA
+Avec support Ensemble Deep Learning, VLM et reconnaissance vocale
 """
 import streamlit as st
 import sys
@@ -12,6 +12,7 @@ sys.path.insert(0, str(project_root))
 
 from medical_agent import MedicalAgent
 from medical_agent.config.settings import settings
+from medical_agent.core.system_prompt import SYSTEM_PROMPT
 
 # Import du classificateur de maladies cutanées (optionnel)
 try:
@@ -19,6 +20,20 @@ try:
     SKIN_CLASSIFIER_AVAILABLE = True
 except ImportError:
     SKIN_CLASSIFIER_AVAILABLE = False
+
+# Import de l'ensemble classifier (optionnel)
+try:
+    from medical_agent.core.ensemble_classifier import EnsembleClassifier
+    ENSEMBLE_AVAILABLE = True
+except ImportError:
+    ENSEMBLE_AVAILABLE = False
+
+# Import du VLM explainer (optionnel)
+try:
+    from medical_agent.core.vlm_explainer import VLMExplainer
+    VLM_AVAILABLE = True
+except ImportError:
+    VLM_AVAILABLE = False
 
 # Import des services vocaux (optionnel)
 try:
@@ -74,12 +89,27 @@ def transcribe_audio(audio_bytes, voice_service):
     finally:
         tmp_path.unlink(missing_ok=True)
 
+@st.cache_resource
+def initialize_vlm_explainer():
+    """Initialise le VLM explainer.
+
+    Tries BLIP first; falls back to the template-based system if BLIP is not
+    installed or cannot be loaded (e.g., no internet access or insufficient RAM).
+    """
+    if not VLM_AVAILABLE:
+        return None
+    try:
+        explainer = VLMExplainer(use_blip=True)  # BLIP if available; template fallback otherwise
+        return explainer
+    except Exception:
+        return None
+
 def main():
     """Application principale"""
-    
-    st.title("🏥 Agent Médical")
-    st.caption("Système de diagnostic avec Deep Learning et reconnaissance vocale")
-    
+
+    st.title("🏥 Agent Médical Vision IA")
+    st.caption("Ensemble Deep Learning (EfficientNet-B3 + MobileNetV2 + ResNet50) + VLM Explanation")
+
     agent, error = initialize_agent()
     voice_service, voice_error = initialize_voice_service()
     
@@ -91,38 +121,56 @@ def main():
     # Sidebar
     with st.sidebar:
         st.header("ℹ️ Informations")
-        
+
         # Afficher le mode actuel
         if hasattr(agent, 'use_deep_learning') and agent.use_deep_learning:
             st.success("🧠 Mode Deep Learning actif")
         else:
             st.info("📊 Mode règles classique")
-        
+
+        if ENSEMBLE_AVAILABLE:
+            st.success("🤖 Ensemble IA disponible (EfficientNet-B3 + MobileNetV2 + ResNet50)")
+        else:
+            st.warning("🤖 Ensemble IA non disponible")
+
+        if VLM_AVAILABLE:
+            st.success("💬 Explication VLM disponible")
+        else:
+            st.info("💬 Explication VLM non disponible")
+
         if VOICE_AVAILABLE and voice_service:
             st.success("🎤 Reconnaissance vocale disponible")
         else:
             st.warning("🎤 Reconnaissance vocale non disponible")
-        
+
         st.markdown("""
         ### Comment utiliser
-        
+
         1. **Texte**: Décrivez vos symptômes
         2. **Voix**: Ou utilisez le microphone 🎤
         3. Cliquez sur **Analyser**
         4. Consultez les résultats
-        
+
         ### Exemples
         - "J'ai de la fièvre à 39°C et mal à la gorge"
         - "Je tousse et j'ai du mal à respirer"
         - "J'ai des nausées et vomissements"
-        
+
         ### ⚠️ Avertissement
         Outil informatif uniquement.
         Consultez un professionnel de santé.
         """)
-        
+
         st.divider()
-        
+
+        # Show abbreviated system prompt context
+        with st.expander("🤖 Contexte IA (System Prompt)", expanded=False):
+            # Display first ~500 chars of the system prompt
+            preview = SYSTEM_PROMPT[:500].strip()
+            st.caption(preview + "…")
+
+        st.divider()
+
         if agent and agent.disease_predictor.df is not None:
             st.markdown("### 📈 Statistiques")
             n_diseases = agent.disease_predictor.df['disease'].nunique()
@@ -380,7 +428,7 @@ def main():
             st.warning("Veuillez décrire vos symptômes")
 
     # ------------------------------------------------------------------
-    # Onglet 2 : Diagnostic par image de peau
+    # Onglet 2 : Diagnostic par image de peau (Ensemble + VLM)
     # ------------------------------------------------------------------
     with skin_tab:
         if not SKIN_CLASSIFIER_AVAILABLE:
@@ -389,20 +437,45 @@ def main():
                 "Installez les dépendances : `pip install torchvision Pillow`"
             )
         else:
-            skin_model_path = project_root / "models" / "skin_disease_model.pth"
-            model_exists = skin_model_path.exists()
+            # Check if at least one model (ensemble or single) is available
+            ensemble_model_paths = [
+                project_root / "models" / "efficientnet_skin.pth",
+                project_root / "models" / "mobilenet_skin.pth",
+                project_root / "models" / "resnet_skin.pth",
+            ]
+            single_model_path = project_root / "models" / "skin_disease_model.pth"
+            ensemble_models_found = [p for p in ensemble_model_paths if p.exists()]
+            any_model_exists = bool(ensemble_models_found) or single_model_path.exists()
 
-            if not model_exists:
+            if not any_model_exists:
                 st.warning(
-                    "⚠️ Modèle de classification cutanée introuvable. "
-                    "Entraînez-le d'abord avec la commande :"
+                    "⚠️ Aucun modèle de classification cutanée trouvé. "
+                    "Entraînez l'ensemble avec la commande :"
                 )
                 st.code(
-                    'python scripts/train_skin_classifier.py '
+                    'python scripts/train_ensemble.py '
                     '--data_dir "chemin/vers/IMG_CLASSES"',
                     language="bash",
                 )
+                st.info(
+                    "Ou entraînez le modèle simple MobileNetV2 :\n"
+                    '`python scripts/train_skin_classifier.py --data_dir "chemin/vers/IMG_CLASSES"`'
+                )
             else:
+                # Show which models are loaded
+                if ensemble_models_found:
+                    model_names = []
+                    name_map = {
+                        "efficientnet_skin.pth": "EfficientNet-B3",
+                        "mobilenet_skin.pth": "MobileNetV2",
+                        "resnet_skin.pth": "ResNet50",
+                    }
+                    for p in ensemble_models_found:
+                        model_names.append(name_map.get(p.name, p.name))
+                    st.success(f"✅ Modèles d'ensemble chargés : {', '.join(model_names)}")
+                elif single_model_path.exists():
+                    st.info("ℹ️ Modèle MobileNetV2 simple utilisé (aucun modèle d'ensemble trouvé)")
+
                 skin_col1, skin_col2 = st.columns([2, 1])
 
                 with skin_col1:
@@ -450,6 +523,16 @@ def main():
                         value=True,
                         key="skin_show_conf",
                     )
+                    show_individual = st.checkbox(
+                        "Afficher les prédictions individuelles",
+                        value=True,
+                        key="skin_show_individual",
+                    )
+                    show_vlm = st.checkbox(
+                        "Afficher l'explication VLM",
+                        value=True,
+                        key="skin_show_vlm",
+                    )
 
                 analyze_skin = st.button(
                     "🔬 Analyser l'image",
@@ -459,10 +542,25 @@ def main():
                 )
 
                 if analyze_skin and skin_image is not None:
-                    with st.spinner("Analyse de l'image en cours..."):
+                    with st.spinner("Analyse de l'image par l'ensemble IA..."):
                         try:
-                            skin_result = agent.diagnose_skin_image(skin_image, top_n=skin_top_n)
+                            # Try ensemble first, fall back to single model
+                            individual_preds = {}
+                            agreement_status = None
 
+                            if ensemble_models_found and ENSEMBLE_AVAILABLE:
+                                try:
+                                    skin_result, individual_preds = agent.diagnose_skin_image_ensemble(
+                                        skin_image, top_n=skin_top_n
+                                    )
+                                    # Read the agreement flag set by the ensemble classifier
+                                    agreement_status = getattr(skin_result, '_ensemble_agreement', None)
+                                except Exception:
+                                    skin_result = agent.diagnose_skin_image(skin_image, top_n=skin_top_n)
+                            else:
+                                skin_result = agent.diagnose_skin_image(skin_image, top_n=skin_top_n)
+
+                            # Urgent attention banner
                             if skin_result.needs_urgent_attention:
                                 st.error(
                                     "🚨 **ATTENTION URGENTE** — L'analyse détecte une possible lésion "
@@ -470,26 +568,50 @@ def main():
                                     "Consultez un dermatologue sans délai."
                                 )
 
+                            # Ensemble agreement note
+                            if agreement_status is True:
+                                st.success("✅ **Consensus** : Tous les modèles s'accordent sur le diagnostic.")
+                            elif agreement_status is False:
+                                st.info("ℹ️ **Divergence** : Les modèles ne s'accordent pas — le plus confiant a été retenu.")
+
+                            # Main ensemble result
                             if skin_result.top_diagnosis:
                                 top = skin_result.top_diagnosis
                                 severity_colors = {
                                     "red": "red",
                                     "orange": "orange",
-                                    # Streamlit does not support yellow text; map to orange for visibility
                                     "yellow": "orange",
                                     "green": "green",
                                 }
                                 color_key = severity_colors.get(top.color, "gray")
 
-                                st.subheader("Diagnostic principal")
+                                st.subheader("🏆 Résultat Ensemble")
                                 st.markdown(
                                     f"**:{color_key}[{top.readable_name}]**  "
                                     f"— Sévérité : *{top.severity}*"
                                 )
                                 st.progress(top.confidence)
-                                st.markdown(f"**Confiance :** {top.confidence:.1%}")
+                                st.markdown(f"**Confiance ensemble :** {top.confidence:.1%}")
                                 st.info(f"💡 **Conseil :** {top.advice}")
 
+                            # Individual model predictions
+                            if individual_preds and show_individual:
+                                with st.expander("🔍 Prédictions individuelles par modèle", expanded=False):
+                                    cols = st.columns(len(individual_preds))
+                                    for col, (model_name, preds) in zip(cols, individual_preds.items()):
+                                        with col:
+                                            st.markdown(f"**{model_name}**")
+                                            if preds:
+                                                top_pred = preds[0]
+                                                st.markdown(f"Top-1: **{top_pred.readable_name}**")
+                                                st.progress(top_pred.confidence)
+                                                st.caption(f"{top_pred.confidence:.1%}")
+                                            for pred in preds[1:3]:
+                                                st.caption(
+                                                    f"• {pred.readable_name} ({pred.confidence:.1%})"
+                                                )
+
+                            # Other candidates
                             if skin_result.candidates and show_confidences:
                                 st.subheader("Autres candidats")
                                 for idx, cand in enumerate(skin_result.candidates[1:], 2):
@@ -501,19 +623,35 @@ def main():
                                         st.markdown(f"**Sévérité :** {cand.severity}")
                                         st.markdown(f"**Conseil :** {cand.advice}")
 
+                            # VLM Explanation
+                            if show_vlm and VLM_AVAILABLE:
+                                st.subheader("💬 Explication VLM")
+                                with st.spinner("Génération de l'explication..."):
+                                    try:
+                                        vlm = initialize_vlm_explainer()
+                                        if vlm is not None:
+                                            explanation = vlm.explain(skin_image, skin_result)
+                                            st.markdown(explanation)
+                                        else:
+                                            st.info("Le module VLM n'a pas pu être initialisé.")
+                                    except Exception as vlm_err:
+                                        st.warning(f"Explication VLM non disponible : {vlm_err}")
+
                             st.divider()
                             st.warning(skin_result.disclaimer)
 
                         except Exception as e:
                             st.error(f"Erreur lors de l'analyse : {e}")
-    
+
     # Footer
     st.divider()
     st.markdown("""
     <div style="text-align: center; color: gray;">
-        <p>Agent Médical v2.0</p>
+        <p>Agent Médical Vision IA v3.0</p>
+        <p>Ensemble EfficientNet-B3 + MobileNetV2 + ResNet50 | VLM Explanations</p>
         <p>Outil informatif - Ne remplace pas une consultation médicale</p>
         <p>En cas d'urgence: 15 (SAMU)</p>
+        <p>⚠️ This is not medical advice. Consult a healthcare professional.</p>
     </div>
     """, unsafe_allow_html=True)
 
